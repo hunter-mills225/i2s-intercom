@@ -2,7 +2,7 @@
 --! @file     cs4344.vhd
 --! @author   Hunter Mills
 --! @brief    Entity to drive CS4344 I2S
---! @details  CS4344 AXIS DAC Driver: 32b P/S Converter
+--! @details  CS4344 DAC Driver: 32b P/S Converter
 ---------------------------------------------------------------------------------------------------
 
 -- Standard Libraries
@@ -16,13 +16,15 @@ use ieee.math_real.all;
 --! Entity top_level
 entity cs4344 is
   port(
-  resetn        : in std_logic; 										-- Synchronous reset (active low)
-  clk125        : in std_logic; 										-- System Clk
-  data_word     : in std_logic_vector(31 downto 0);	-- 32 bit input data
-	sdata         : out std_logic;  									-- Serial Data for I2S stream
-  lrck          : out std_logic;  									-- Left Right 97656.25kHz Clk
-  sclk          : out std_logic;  									-- Serial 3.125MHz Clk
-  mclk          : out std_logic  										-- Master 12.5MHz Clk
+    s_axis_resetn : in std_logic;                     -- Synchronous axis reset (active low)
+    s_axis_clk    : in std_logic; 										-- AXIS System Clock (125MHz)
+    s_axis_tdata  : in std_logic_vector(31 downto 0);	-- 32 bit input data
+    s_axis_tvalid : in std_logic;                     -- AXIS Valid Signal
+    s_axis_tready : out std_logic;                    -- AXIS Ready Signal
+    sdata         : out std_logic;                    -- Serial Data for I2S stream
+    lrclk         : out std_logic;                    -- Left Right 48kHz Clk
+    sclk          : out std_logic;                    -- Serial 3.125MHz Clk
+    mclk          : out std_logic                     -- Master 12.5MHz Clk
   );
 end cs4344;
 
@@ -31,155 +33,118 @@ architecture behav of cs4344 is
   -- ------------------------------------------------
   -- Signals
   -- ------------------------------------------------
+  --! Clock signals
+  signal mclk_s   : std_logic;
+  signal sclk_s   : std_logic;
+  signal lrclk_s  : std_logic;
+ 
+  --! Clock Counts
+  signal mclk_125clk_count  : natural range 0 to 4    := 0;
+  signal sclk_125clk_count  : natural range 0 to 19   := 0;
+  signal lrclk_125clk_count : natural range 0 to 1279 := 0;
 
-  --! Counter Signals
-  signal l_cnt    : natural range 0 to 1279 := 0;
-  signal s_cnt    : natural range 0 to 39   := 0;
-  signal m_cnt    : natural range 0 to 9    := 0;
-  signal data_cnt : unsigned(4 downto 0)    := (others => '0');
+  --! Data Counter
+  signal data_count : natural range 0 to 23 := 23;
 
-  --! Clock Signals
-  signal s_lrck : std_logic;
-  signal s_sclk : std_logic;
-  signal s_mclk : std_logic;
-
-  --! Register
-  signal data_word_reg  : std_logic_vector(31 downto 0);
+  --! Register Signals
+  signal data_word  : std_logic_vector(31 downto 0);
+  signal valid_rise : std_logic;
 
 begin
+
   -- ------------------------------------------------
-  -- Processes for counters and clk
+  -- Clock Processes
   -- ------------------------------------------------
-
-	--! Process to count clk125 for MCLK
-	--!		MCLK is 12.5MHz = 125MHz / 10
-  mclk_cnt_p : process(clk125)
+  --! Process to create MCLK
+  mclk_p : process(s_axis_clk)
   begin
-    if rising_edge(clk125) then
-      if resetn = '1' then
-        m_cnt <= 0;
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        mclk_125clk_count <= 0;
+        mclk_s              <= '0';
+      elsif mclk_125clk_count = 4 then
+        mclk_125clk_count <= 0;
+        mclk_s            <= not(mclk_s);
       else
-        if m_cnt = 9 then
-          m_cnt <= 0;
-        else
-          m_cnt <= m_cnt + 1;
-        end if;
+        mclk_125clk_count <= mclk_125clk_count + 1;
       end if;
     end if;
   end process;
 
-	--! Process to count clk125 for LRCK
-	--! 	LRCK is sample rate of putting both words into the device
-	--!		LRCK = 12.5MHz / 128 = 97656.25Hz
-  lrck_cnt_p : process(clk125)
+  --! Process to create SCLK
+  sclk_p : process(s_axis_clk)
   begin
-    if rising_edge(clk125) then
-      if resetn = '1' then
-        l_cnt <= 80;    -- This offset is to account for the 1 data_cnt offset, set to 0 if that is wrong
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        sclk_125clk_count <= 0;
+        sclk_s              <= '0';
+      elsif sclk_125clk_count = 19 then
+        sclk_125clk_count <= 0;
+        sclk_s            <= not(sclk_s);
       else
-        if l_cnt = 1279 then
-          l_cnt <= 0;
-        else
-          l_cnt <= l_cnt + 1;
-        end if;
+        sclk_125clk_count <= sclk_125clk_count + 1;
       end if;
     end if;
   end process;
 
-	--! Process to count clk125 for SCLK
-	--!		SCLK is sample rate * 32b
-	--!		SCLK = LRCK * 32
-  sclk_cnt_p : process(clk125)
+  --! Process to create LRCLK
+  lrclk_p : process(s_axis_clk)
   begin
-    if rising_edge(clk125) then
-      if resetn = '1' then
-        s_cnt <= 0;
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        lrclk_125clk_count  <= 0;
+        lrclk_s               <= '0';
+      elsif lrclk_125clk_count = 1279 then
+        lrclk_125clk_count  <= 0;
+        lrclk_s               <= not(lrclk_s);
       else
-        if s_cnt = 39 then
-          s_cnt <= 0;
-        else
-          s_cnt <= s_cnt + 1;
-        end if;
-      end if;
-    end if;
-  end process;
-
-  --! Process to shift data on rising edge of SCLK
-  data_cnt_p : process(clk125)
-  begin
-    if rising_edge(clk125) then
-      if resetn = '1' then
-        data_cnt  <= (others => '1');
-      else
-        if s_sclk = '1' and s_cnt = 39 then
-          data_cnt  <= data_cnt - 1;
-        end if;
-      end if;
-    end if;
-  end process;
-
-  --! Process to create lrck
-  clk_lrck_p : process(clk125)
-  begin
-    if rising_edge(clk125) then
-      if resetn = '1' then
-        s_lrck  <= '0';
-      else
-        if l_cnt = 1279 then
-          s_lrck  <= not(s_lrck);
-        end if;
-      end if;
-    end if;
-  end process;
-
-  --! Process to create sclk
-  clk_sclk_p : process(clk125)
-  begin
-    if rising_edge(clk125) then
-      if resetn = '1' then
-        s_sclk  <= '0';
-      else
-        if s_cnt = 39 then
-          s_sclk  <= not(s_sclk);
-        end if;
-      end if;
-    end if;
-  end process;
-
-  --! Process to create mclk
-  clk_mclk_p : process(clk125)
-  begin
-    if rising_edge(clk125) then
-      if resetn = '1' then
-        s_mclk  <= '0';
-      else
-        if m_cnt = 4 then
-          s_mclk  <= not(s_mclk);
-        end if;
+      lrclk_125clk_count <= lrclk_125clk_count + 1;
       end if;
     end if;
   end process;
 
   -- ------------------------------------------------
-  -- Register Input Data for Clock Domain Crossing
+  -- Data Count
   -- ------------------------------------------------
-  cdc_reg_data_word_p : process(clk125)
+  data_count_p : process(s_axis_clk)
   begin
-    if rising_edge(clk125) then
-      if resetn = '1' then
-        data_word_reg <= (others => '0');
-      elsif data_cnt = 0 and s_cnt = 39 and s_sclk = '1' then
-        data_word_reg <= data_word;
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        data_count  <= 23;
+      elsif sclk = '1' and sclk_125clk_count = 19 then
+        data_count  <= data_count - 1;
+
+  -- ------------------------------------------------
+  -- Registers
+  -- ------------------------------------------------
+  reg_valid_p : process(s_axis_clk)
+  begin
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        valid_rise  <= '0';
+      else
+        valid_rise  <= s_axis_tvalid;
       end if;
     end if;
   end process;
 
-  -- ------------------------------------------------
-  -- Signal Assignments
-  -- ------------------------------------------------
-  lrck  <= s_lrck;
-  bclk  <= s_bclk;
-  mclk  <= s_mclk;
-  sdata <= data_word_reg(to_integer(data_cnt));
+  reg_data_p : process(s_axis_clk)
+  begin
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        data_word <= (others => '0');
+        s_axis_tready <= '1';
+      elsif valid_rise = '0' and s_axis_tvalid = '1' and data_count = 0 then  --! Rising Edge of tvalid and start of data
+        data_word <= s_axis_tdata;
+        s_axis_tready <= '0';
+      elsif valid_rise = '1' and s_axis_tvalid = '0' and data_count = 31 then --! Falling Edge of tvalid and end of data
+          data_word <= s_axis_tdata;
+          s_axis_tready <= '1';
+      end if;
+    end if;
+  end process;
 
+  mclk <= mclk_s;
+  sclk <= sclk_s;
+  lrclk <= lrclk_s;
 end behav;
