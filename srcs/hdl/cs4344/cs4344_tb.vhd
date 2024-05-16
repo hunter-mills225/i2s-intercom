@@ -2,7 +2,7 @@
 --! @file     cs4344_tb.vhd
 --! @author   Hunter Mills
 --! @brief    Entity to drive CS4344 I2S
---! @details  Testbench for CS4344 DAC Driver
+--! @details  Simple testbench for CS4344 DAC Driver : 2 Frames of AXI4-Stream Data
 ---------------------------------------------------------------------------------------------------
 -- Standard Libraries
 
@@ -26,15 +26,17 @@ architecture behav of cs4344_tb is
   -- Device Under Test Interface Signals
   --------------------------------------------------------------------------------
   -- AXI4-Stream Inputs
-  signal s_axis_resetn : std_logic;                     -- Synchronous axis reset (active low)
-  signal s_axis_clk    : std_logic; 										-- AXIS System Clock (125MHz)
-  signal s_axis_tdata  : std_logic_vector(31 downto 0);	-- 32 bit input data
-  signal s_axis_tvalid : std_logic;
+  signal s_axis_resetn  : std_logic := '0';                      -- Synchronous axis reset (active low)
+  signal s_axis_clk     : std_logic := '0'; 										  -- AXIS System Clock (125MHz)
+  signal s_axis_tdata   : std_logic_vector(31 downto 0) := (others => '0');	-- 32 bit input data
+  signal s_axis_tvalid  : std_logic := '0';
+  signal s_axis_tready  : std_logic := '1';
+  signal s_axis_tlast   : std_logic := '0';
 
   -- CS4344 PMOD Signals
 	signal sdata         : std_logic;  									  -- Serial Data for I2S stream
   signal lrclk         : std_logic;  									  -- Left Right 48kHz Clk
-  signal sclk          : std_logic;  									  -- Serial 3.072MHz Clk
+  signal sclk          : std_logic;  									  -- Serial 3.125MHz Clk
   signal mclk          : std_logic;  									  -- Master 12.5MHz Clk
 
   --------------------------------------------------------------------------------
@@ -47,9 +49,6 @@ architecture behav of cs4344_tb is
   signal   simulation_done           : boolean   := false;
   signal   clock                     : std_logic := '0';
   signal   resetn                    : std_logic := '1';
-  signal   s_axis_iq_in_enable       : std_logic := '0';
-  signal   s_axis_weights_enable     : std_logic := '0';
-  signal   m_axis_iq_out_verify_done : boolean   := false;
 
 begin
 
@@ -62,6 +61,8 @@ begin
       s_axis_clk    => s_axis_clk,
       s_axis_tdata  => s_axis_tdata,
       s_axis_tvalid => s_axis_tvalid,
+      s_axis_tready => s_axis_tready,
+      s_axis_tlast  => s_axis_tlast,
       sdata         => sdata,
       lrclk         => lrclk,
       sclk          => sclk,
@@ -97,14 +98,27 @@ begin
 
   begin
 
-    -- **************************************************
+    -- --------------------------------------------------
     -- Reset
-    -- **************************************************
+    -- --------------------------------------------------
     resetn                <= '0';
     wait for CLOCK_PERIOD * 20; -- Wait for an arbitrary 20 clocks
     resetn                <= '1';
+    wait for CLOCK_PERIOD * 10;
+
+    -- --------------------------------------------------
+    -- First Frame
+    -- --------------------------------------------------
+    s_axis_tdata  <= x"00F0F0F0";
+    s_axis_tvalid <= '1';
     wait for CLOCK_PERIOD;
-    wait for CLOCK_PERIOD * 1270 * 8;
+    s_axis_tdata  <= x"000F0F0F";
+    s_axis_tlast  <= '1';
+    wait for CLOCK_PERIOD;
+    s_axis_tlast  <= '0';
+    s_axis_tvalid <= '0';
+    wait until s_axis_tready = '1';
+    wait for CLOCK_PERIOD * 100;
     simulation_done <= true;
 
 
