@@ -118,9 +118,22 @@ begin
     s_axis_tlast  <= '0';
     s_axis_tvalid <= '0';
     wait until s_axis_tready = '1';
+
+    -- --------------------------------------------------
+    -- Second Frame
+    -- --------------------------------------------------
+    wait for CLOCK_PERIOD * 100;
+    s_axis_tdata  <= x"00A0A0A0";
+    s_axis_tvalid <= '1';
+    wait for CLOCK_PERIOD;
+    s_axis_tdata  <= x"000A0A0A";
+    s_axis_tlast  <= '1';
+    wait for CLOCK_PERIOD;
+    s_axis_tlast  <= '0';
+    s_axis_tvalid <= '0';
+    wait until s_axis_tready = '1';
     wait for CLOCK_PERIOD * 100;
     simulation_done <= true;
-
 
   end process w_test_procedure;
 

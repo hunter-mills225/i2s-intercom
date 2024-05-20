@@ -227,7 +227,7 @@ begin
     if rising_edge(s_axis_clk) then
       if s_axis_resetn = '0' then
         s_axis_tready <= '1';
-      elsif rdata_valid = '1' or ldata_valid = '1' then
+      elsif rdata_valid = '1' or ldata_valid = '1' or s_axis_tvalid = '1' then
         s_axis_tready <= '0';
       elsif (rdata_valid = '0' or ldata_valid = '0') and frame_count = 31 then
         s_axis_tready <= '1';
