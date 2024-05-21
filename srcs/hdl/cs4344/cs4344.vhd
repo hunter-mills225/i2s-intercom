@@ -139,6 +139,13 @@ begin
     end if;
   end process;
 
+  --! Process to find index in data
+  data_count_p : process(s_axis_clk)
+  begin
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        data_count  <= 24;
+      elsif 
   -- ------------------------------------------------
   -- Registers
   -- ------------------------------------------------
@@ -196,6 +203,34 @@ begin
       end if;
     end if;
   end process;
+
+
+  --! Process to create tready for FIFO to advance
+  fifo_tready_p : process(s_axis_clk)
+  begin
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        fifo_tready <= '0';
+      elsif (lrclk_reg = '0' and lrclk_s = '1') or (lrclk_reg = '1' and lrclk_s = '0') then
+          fifo_tready <= '1';
+      else:
+          fifo_tready <= '0';
+      end if;
+    end if;
+  end process;
+
+  --! Latch data from FIFO
+  fifo_data_p : process(s_axis_clk)
+  begin
+    if rising_edge(s_axis_clk) then
+      if s_axis_resetn = '0' then
+        audio_data  <= (others => '0');
+      elsif fifo_valid = '1' then
+        audio_data  <= fifo_data;
+      end if;
+    end if;
+  end process;
+
 
   -- ------------------------------------------------
   -- Signal Assignments
