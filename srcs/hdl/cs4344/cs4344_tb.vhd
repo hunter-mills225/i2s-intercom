@@ -11,6 +11,7 @@ library ieee;
   use ieee.numeric_std.all;
   use ieee.std_logic_textio.all;
   use ieee.math_real.all;
+  use std.env.finish;
 
 -- User Libraries
 use work.all;
@@ -26,29 +27,29 @@ architecture behav of cs4344_tb is
   -- Device Under Test Interface Signals
   --------------------------------------------------------------------------------
   -- AXI4-Stream Inputs
-  signal s_axis_resetn  : std_logic := '0';                      -- Synchronous axis reset (active low)
-  signal s_axis_clk     : std_logic := '0'; 										  -- AXIS System Clock (125MHz)
+  signal s_axis_resetn  : std_logic := '0';                                 -- Synchronous axis reset (active low)
+  signal s_axis_clk     : std_logic := '0'; 										            -- AXIS System Clock (125MHz)
   signal s_axis_tdata   : std_logic_vector(31 downto 0) := (others => '0');	-- 32 bit input data
   signal s_axis_tvalid  : std_logic := '0';
   signal s_axis_tready  : std_logic := '1';
   signal s_axis_tlast   : std_logic := '0';
 
   -- CS4344 PMOD Signals
-	signal sdata         : std_logic;  									  -- Serial Data for I2S stream
-  signal lrclk         : std_logic;  									  -- Left Right 48kHz Clk
-  signal sclk          : std_logic;  									  -- Serial 3.125MHz Clk
-  signal mclk          : std_logic;  									  -- Master 12.5MHz Clk
+	signal sdata         : std_logic; -- Serial Data for I2S stream
+  signal lrclk         : std_logic; -- Left Right 48kHz Clk
+  signal sclk          : std_logic; -- Serial 3.125MHz Clk
+  signal mclk          : std_logic; -- Master 12.5MHz Clk
 
   --------------------------------------------------------------------------------
   -- Testbench
   --------------------------------------------------------------------------------
   -- Constants
-  constant CLOCK_PERIOD              : time      := 8 ns;   -- 125MHz
+  constant CLOCK_PERIOD : time := 8 ns; -- 125MHz
 
   -- Signals
-  signal   simulation_done           : boolean   := false;
-  signal   clock                     : std_logic := '0';
-  signal   resetn                    : std_logic := '1';
+  signal   simulation_done  : boolean   := false;
+  signal   clock            : std_logic := '0';
+  signal   resetn           : std_logic := '1';
 
 begin
 
@@ -62,7 +63,6 @@ begin
       s_axis_tdata  => s_axis_tdata,
       s_axis_tvalid => s_axis_tvalid,
       s_axis_tready => s_axis_tready,
-      s_axis_tlast  => s_axis_tlast,
       sdata         => sdata,
       lrclk         => lrclk,
       sclk          => sclk,
@@ -109,6 +109,7 @@ begin
     -- --------------------------------------------------
     -- First Frame
     -- --------------------------------------------------
+    report "First Frame";
     s_axis_tdata  <= x"00F0F0F0";
     s_axis_tvalid <= '1';
     wait for CLOCK_PERIOD;
@@ -117,11 +118,12 @@ begin
     wait for CLOCK_PERIOD;
     s_axis_tlast  <= '0';
     s_axis_tvalid <= '0';
-    wait until s_axis_tready = '1';
+    wait until falling_edge(lrclk);
 
     -- --------------------------------------------------
     -- Second Frame
     -- --------------------------------------------------
+    report "Second Frame";
     wait for CLOCK_PERIOD * 100;
     s_axis_tdata  <= x"00A0A0A0";
     s_axis_tvalid <= '1';
@@ -131,9 +133,10 @@ begin
     wait for CLOCK_PERIOD;
     s_axis_tlast  <= '0';
     s_axis_tvalid <= '0';
-    wait until s_axis_tready = '1';
+    wait until rising_edge(lrclk);
     wait for CLOCK_PERIOD * 100;
-    simulation_done <= true;
+    report "************ TB COMPLETE***************";
+    finish;
 
   end process w_test_procedure;
 
