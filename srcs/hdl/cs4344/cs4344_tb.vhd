@@ -32,7 +32,6 @@ architecture behav of cs4344_tb is
   signal s_axis_tdata   : std_logic_vector(31 downto 0) := (others => '0');	-- 32 bit input data
   signal s_axis_tvalid  : std_logic := '0';
   signal s_axis_tready  : std_logic := '1';
-  signal s_axis_tlast   : std_logic := '0';
 
   -- CS4344 PMOD Signals
 	signal sdata         : std_logic; -- Serial Data for I2S stream
@@ -114,9 +113,7 @@ begin
     s_axis_tvalid <= '1';
     wait for CLOCK_PERIOD;
     s_axis_tdata  <= x"000F0F0F";
-    s_axis_tlast  <= '1';
     wait for CLOCK_PERIOD;
-    s_axis_tlast  <= '0';
     s_axis_tvalid <= '0';
     wait until falling_edge(lrclk);
 
@@ -129,13 +126,12 @@ begin
     s_axis_tvalid <= '1';
     wait for CLOCK_PERIOD;
     s_axis_tdata  <= x"000A0A0A";
-    s_axis_tlast  <= '1';
     wait for CLOCK_PERIOD;
-    s_axis_tlast  <= '0';
     s_axis_tvalid <= '0';
     wait until rising_edge(lrclk);
     wait for CLOCK_PERIOD * 100;
     report "************ TB COMPLETE***************";
+    simulation_done <= true;
     finish;
 
   end process w_test_procedure;
